@@ -21,46 +21,101 @@ app.get("/api/customers", async (req, res) => {
   }
 });
 
-// endpoint to check if contact name or email already exists, if yes, return the contact id, else create new contact and return null
+// todo: rename CUSTOMER TO CONTACT TABLE
 app.post("/api/identify", async (req, res) => {
   const { email, phoneNumber } = req.body;
+  // check if email or phoneNumber already exists as primary contact, if yes, then create a new secondary contact
   try {
-    const checkContact = await itemsPool.query(
-      "SELECT * FROM CUSTOMER WHERE email = $1 OR phoneNumber = $2",
-      [email, phoneNumber]
+    const primaryContact = await itemsPool.query(
+      "SELECT * FROM CUSTOMER WHERE  ( email = $1 OR phoneNumber = $2) AND linkprecedence = $3  ",
+      [email, phoneNumber, "primary"]
     );
-    let sameContact = null;
-    if (email && phoneNumber) {
-        console.log("email and phonenumber", email, phoneNumber);
-      sameContact = await itemsPool.query(
-        "SELECT * FROM CUSTOMER WHERE email = $1 AND phonenumber = $2",
-        [email,phoneNumber]
+    const secondaryContact = await itemsPool.query(
+      "SELECT * FROM CUSTOMER WHERE  ( email = $1 OR phoneNumber = $2) AND linkprecedence = $3  ",
+      [email, phoneNumber, "secondary"]
+    );
+
+    // check if email or phoneNumber exists 
+    const existingContact = await itemsPool.query(
+      "SELECT * FROM CUSTOMER WHERE email = $1 OR phoneNumber = $2", [email, phoneNumber]
+    )
+    const exactContact = await itemsPool.query(
+      "SELECT * FROM CUSTOMER WHERE email = $1 AND phoneNumber = $2", [email, phoneNumber]
+    )
+    const isExactContact = !!exactContact.rows.length
+    const isExistingInfo = !!existingContact.rows.length
+    console.log('isExactContact', isExactContact)
+    console.log('isExistingInfo', isExistingInfo)
+
+
+    let id = null;
+    console.log(email, phoneNumber);
+    if (primaryContact.rows.length > 0) {
+      id = primaryContact.rows[0].id;
+    } else if (secondaryContact.rows.length > 0) {
+      id = secondaryContact.rows[0].linkedid;
+    }
+    console.log("prmary", primaryContact.rows);
+    console.log("secondry", secondaryContact.rows);
+    console.log("id >>>", id);
+
+    // insert a new row with linkprecedence of primary, if email or phoneNumber doesnt exist in db
+    if (
+      primaryContact.rows.length === 0 &&
+      secondaryContact.rows.length === 0
+    ) {
+      console.log('creating new contact altogether')
+      const precedence = "primary";
+      const newContact = await itemsPool.query(
+        "INSERT INTO CUSTOMER (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
+        [email, phoneNumber, id, precedence]
       );
-    } else if (email) {
-      sameContact = await itemsPool.query(
-        "SELECT * FROM CUSTOMER WHERE email = $1 AND linkprecedence = $2",
-        [email, "primary"]
-      );
-    } else if (phoneNumber) {
-      sameContact = await itemsPool.query(
-        "SELECT * FROM CUSTOMER WHERE phonenumber = $1 AND linkprecedence = $2",
-        [phoneNumber, "primary"]
-      );
+      res.json({
+        message: "1st IF Secondary contact added!",
+        contact: newContact.rows,
+      });
     }
 
-    console.log("checkContact", checkContact.rows);
-    console.log("sameContact", sameContact.rows);
+    // if primary exists, then create a secondary contact(only if there's no secondary contact with exat name and number)
+    if (primaryContact.rows.length > 0 && secondaryContact.rows.length === 0) {
+      console.log('creating a secondayr contact, if email or number is dff...')
+      const precedence = "secondary";
+      const newContact = await itemsPool.query(
+        "INSERT INTO CUSTOMER (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
+        [email, phoneNumber, id, precedence]
+      );
+      res.json({
+        message: "2nd IF Secondary contact added!",
+        contact: newContact.rows,
+      });
+    }
 
-    // if contact is secondary, return Contact Object
-    if (sameContact.rows.length > 0) {
+    // if primary contact, may or may not exist, but only seocndayr ones, then use linkedId as id
+    if (primaryContact.rows.length == 0 && secondaryContact.rows.length > 0 && !isExactContact) {
+      console.log('creating a second secondayr contact, if email or number is dff...')
+      const precedence = "secondary";
+      const newContact = await itemsPool.query(
+        "INSERT INTO CUSTOMER (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
+        [email, phoneNumber, id, precedence]
+      );
+      res.json({
+        message: "3rd IF Secondary contact added!",
+        contact: newContact.rows,
+      });
+    }
+
+    // return Contact Object specifying, secondary contact rows
+    if (primaryContact.rows.length > 0 && isExactContact) {
+      console.log('return contact obj')
+
       const secondaryContacts = await itemsPool.query(
         "SELECT * FROM CUSTOMER WHERE linkedId = $1",
-        [sameContact.rows[0].linkedid]
+        [primaryContact.rows[0].id]
       );
       if (secondaryContacts.rows.length > 0) {
         res.json({
           contact: {
-            primaryContactId: sameContact.rows[0].linkedid,
+            primaryContactId: primaryContact.rows[0].id,
             emails: [secondaryContacts.rows.map((o: any) => o.email)],
             phoneNumbers: [
               secondaryContacts.rows.map((o: any) => o.phonenumber),
@@ -68,65 +123,14 @@ app.post("/api/identify", async (req, res) => {
             secondaryContactIds: [secondaryContacts.rows.map((o: any) => o.id)],
           },
         });
-      } else {
-        res.json({
-          message:
-            "Input contact is primary contact, no secondary contacts found.",
-        });
       }
     }
 
-    if (checkContact.rows.length > 0 && sameContact.rows.length === 0) {
-      // create a new contact with linkPrecedence = secondary
-      // get primary contact id and link to secondary row's linkedId
-      let currentId = null;
-      const primaryContact = await itemsPool.query(
-        `SELECT * FROM CUSTOMER WHERE linkedId IS NULL AND (email = $1 OR phoneNumber = $2)`,
-        [email, phoneNumber]
-      );
-      // edge case: if primary contact doesnt exist, use secondary contact to get linkedid
-      if (primaryContact.rows.length === 0) {
-        const secondaryContact = await itemsPool.query(
-          `SELECT * FROM CUSTOMER WHERE linkPrecedence = 'secondary' AND (email = $1 OR phoneNumber = $2)`,
-          [email, phoneNumber]
-        );
-        currentId = secondaryContact.rows[0].linkedid;
-        const newContact = await itemsPool.query(
-          "INSERT INTO CUSTOMER (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
-          [email, phoneNumber, currentId, "secondary"]
-        );
-
-        res.json({
-          message: "New Secondary Contact created!",
-          contact: newContact.rows[0],
-        });
-      } else {
-        // for conversion of primary to secondary contacts
-        currentId = primaryContact.rows[0].id;
-        console.log(
-          "secondary contaact not found, primary contact querying...",
-          primaryContact.rows[0]
-        );
-      }
-    } else if (
-      checkContact.rows.length === 0 &&
-      sameContact.rows.length === 0
-    ) {
-      const linkPrecedence = "primary";
-      const newContact = await itemsPool.query(
-        "INSERT INTO CUSTOMER (email, phoneNumber, linkPrecedence) VALUES ($1, $2, $3) RETURNING *",
-        [email, phoneNumber, linkPrecedence]
-      );
-      res.json({
-        message: "New contact added!",
-        contact: newContact.rows,
-      });
-    }
-  } catch (error: any) {
+  } catch (error) {
     console.log(error);
-    res.status(500).send(error.message);
   }
 });
+
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
