@@ -14,6 +14,17 @@ export interface Customer {
   deletedAt: any;
 }
 
+export interface CustomerRow{
+  id: number;
+  phonenumber: string;
+  email: string;
+  linkedid: any;
+  linkPrecedence: LinkPrecedence;
+  createdat: number;
+  updatedat: any;
+  deletedat: any;
+}
+
 export interface Contact {
   primaryContactId: number;
   emails: string[];
