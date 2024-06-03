@@ -1,9 +1,9 @@
 import express from "express";
-import { CustomerRow } from "./types";
-const itemsPool = require("./dbconf.ts");
-const dotenv = require("dotenv");
+import { CustomerRow } from "./types.js";
+import { itemsPool } from "./dbconf.js";
+import { config } from 'dotenv';
 
-dotenv.config();
+config();
 
 const app = express();
 app.use(express.json());
