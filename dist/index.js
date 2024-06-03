@@ -43,6 +43,10 @@ app.get("/api/contacts", async (req, res) => {
 app.post("/api/identify", async (req, res) => {
     const { email, phoneNumber } = req.body;
     // basic validation for api requests from Postman or other clients
+    if (!email || !phoneNumber) {
+        res.json({ message: "Email and Phone Number cannot be null" });
+        return;
+    }
     if ((email && !email.trim()) || (phoneNumber && !phoneNumber.trim())) {
         res.json({ message: "Email and Phone Number both are invalid" });
         return;

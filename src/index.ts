@@ -51,7 +51,13 @@ app.get("/api/contacts", async (req, res) => {
 // todo: rename CONTACT TO CONTACT TABLE
 app.post("/api/identify", async (req, res) => {
   const { email, phoneNumber } = req.body;
+
   // basic validation for api requests from Postman or other clients
+  if (!email || !phoneNumber){
+    res.json({ message: "Email and Phone Number cannot be null" });
+    return
+}
+
   if ((email && !email.trim()) || (phoneNumber && !phoneNumber.trim())) {
     res.json({ message: "Email and Phone Number both are invalid" });
     return;
@@ -99,7 +105,7 @@ app.post("/api/identify", async (req, res) => {
       const precedence = "primary";
       await itemsPool.query(
         "INSERT INTO CONTACT (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
-        [email, phoneNumber, id, precedence]
+        [email, phoneNumber, id, precedence] 
       );
       const { rows: primaryContact } = await itemsPool.query(
         "SELECT * FROM CONTACT WHERE  ( email = $1 OR phoneNumber = $2) AND linkprecedence = $3  ",
