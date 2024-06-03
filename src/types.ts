@@ -3,7 +3,7 @@ export enum LinkPrecedence {
   Secondary = "secondary",
 }
 
-export interface Customer {
+export interface Contact {
   id: number;
   phoneNumber: string;
   email: string;
@@ -14,7 +14,7 @@ export interface Customer {
   deletedAt: any;
 }
 
-export interface CustomerRow{
+export interface ContactRow{
   id: number;
   phonenumber: string;
   email: string;
@@ -25,7 +25,7 @@ export interface CustomerRow{
   deletedat: any;
 }
 
-export interface Contact {
+export interface ContactInfo {
   primaryContactId: number;
   emails: string[];
   phoneNumbers: string[];
