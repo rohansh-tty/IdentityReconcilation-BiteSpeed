@@ -34,6 +34,16 @@ const returnContactObject = async (primaryContact: ContactRow[]) => {
   };
 };
 
+function validateEmail(email: string) {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return regex.test(email);
+}
+
+function validateMobileNumber(number: string) {
+  const regex = /^[0-9]{10}$/;
+  return regex.test(number);
+}
+
 app.get("/", (req, res) => {
   res.send("Hello, BiteSpeed!");
 });
@@ -53,12 +63,15 @@ app.post("/api/identify", async (req, res) => {
   const { email, phoneNumber } = req.body;
 
   // basic validation for api requests from Postman or other clients
-  if (!email || !phoneNumber){
+  if (!email && !phoneNumber) {
     res.json({ message: "Email and Phone Number cannot be null" });
-    return
-}
+    return;
+  }
 
-  if ((email && !email.trim()) || (phoneNumber && !phoneNumber.trim())) {
+  if (
+    (email && !validateEmail(email.trim())) || 
+    (phoneNumber && !validateMobileNumber(phoneNumber.trim()))
+  ) {
     res.json({ message: "Email and Phone Number both are invalid" });
     return;
   }
@@ -105,7 +118,7 @@ app.post("/api/identify", async (req, res) => {
       const precedence = "primary";
       await itemsPool.query(
         "INSERT INTO CONTACT (email, phoneNumber, linkedId, linkPrecedence) VALUES ($1, $2, $3, $4) RETURNING *",
-        [email, phoneNumber, id, precedence] 
+        [email, phoneNumber, id, precedence]
       );
       const { rows: primaryContact } = await itemsPool.query(
         "SELECT * FROM CONTACT WHERE  ( email = $1 OR phoneNumber = $2) AND linkprecedence = $3  ",
